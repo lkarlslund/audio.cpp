@@ -7,6 +7,7 @@
 | Confucius4-TTS | `confucius4_tts` | `clon` | [Confucius4-TTS](#confucius4-tts) |
 | DramaBox | `dramabox` | `tts`, `clon` | [DramaBox](#dramabox) |
 | MioTTS | `miotts` | `tts` | [MioTTS](#miotts) |
+| Plapre | `plapre` | `tts` | [Plapre](#plapre) |
 | MOSS-TTS-Local | `moss_tts_local` | `tts`, `clon` | [MOSS-TTS-Local](#moss-tts-local) |
 | MOSS-TTS-Nano | `moss_tts_nano` | `tts`, `clon` | [MOSS-TTS-Nano](#moss-tts-nano) |
 | OmniVoice | `omnivoice` | `tts` | [OmniVoice](#omnivoice), [full guide](models/omnivoice.md) |
@@ -228,6 +229,65 @@ audiocpp_cli --task tts --family miotts --model models/MioTTS-1.7B-GGUF/miotts-1
 | `--session-option miotts.best_of_n_max=<n>` | integer | `8` | Maximum best-of-N candidate count. |
 | `--session-option miotts.best_of_n_language=auto|en|ja` | enum | `auto` | Default language used when scoring candidates. |
 | `--session-option miotts.best_of_n_asr_model_path=<dir>` | directory | sibling Qwen3-ASR directory | Qwen3-ASR model used for best-of-N scoring. |
+
+## Plapre
+
+Plapre Nano v2 is a Danish preset-voice TTS model. The native path runs its compact Llama speech-token generator, Kanade 25 Hz mel decoder, and HiFT 24 kHz waveform vocoder without a Python or Node.js runtime.
+
+| Field | Value |
+|---|---|
+| Family | `plapre` |
+| Model directory | Plapre model root with `kanade-25hz-clean/` and `CosyVoice2-0.5B/` dependency directories |
+| Task | `tts` |
+| Modes | `offline`, sentence-chunk `streaming` |
+| Language | `da` |
+| Built-in voices | `tor`, `ida`, `liv`, `ask`, `kaj` |
+| Output | 24 kHz mono audio |
+| Status | Experimental; preset voices only, without reference-audio cloning or editing |
+
+Expected package layout:
+
+```text
+plapre-model/
+  config.json
+  generation_config.json
+  model.safetensors
+  speaker_proj.pt
+  speakers.json
+  tokenizer.json
+  tokenizer_config.json
+  kanade-25hz-clean/
+    config.yaml
+    model.safetensors
+  CosyVoice2-0.5B/
+    hift.pt
+```
+
+Offline synthesis:
+
+```bash
+audiocpp_cli --task tts --family plapre --model /path/to/plapre-model --backend cpu --language da --text "Hej, hvordan har du det?" --voice-id tor --out out.wav
+```
+
+Sentence streaming:
+
+```bash
+audiocpp_cli --task tts --family plapre --model /path/to/plapre-model --backend cpu --mode streaming --language da --text "Hej. Dette bliver sendt i bidder." --voice-id ida --out out.wav
+```
+
+| Option | Values | Default | Meaning |
+|---|---|---:|---|
+| `--voice-id` | `tor`, `ida`, `liv`, `ask`, `kaj` | `tor` | Built-in Danish speaker. |
+| `--text-chunk-size` | integer chars | `240` | Long-form text chunk size. |
+| `--max-tokens` | positive integer | `700` | Maximum 25 Hz speech tokens generated per chunk. |
+| `--temperature` | `0.0`-`2.0` | `0.8` | LM sampling temperature. |
+| `--top-k` | non-negative integer | `50` | LM top-k sampling limit. |
+| `--top-p` | `0.0`-`1.0` | `0.95` | LM nucleus sampling limit. |
+| `--do-sample` | `true`, `false` | `true` | Enable stochastic LM sampling. |
+| `--seed` | unsigned integer | random | LM sampling and HiFT source-noise seed. |
+| `--request-option silence_duration=<seconds>` | `0.0`-`10.0` | `0.1` | Silence inserted between long-form chunks. |
+| `--session-option plapre.weight_type=<type>` | `native`, `f32`, `f16`, `bf16`, `q8_0` | `native` | Language-model matmul weight storage type. |
+| `--session-option plapre.acoustic_weight_type=<type>` | `native`, `f32`, `f16`, `bf16`, `q8_0` | `native` | Kanade and HiFT matmul weight storage type. |
 
 ## MOSS-TTS-Local
 

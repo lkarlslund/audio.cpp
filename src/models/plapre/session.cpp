@@ -32,12 +32,11 @@ std::shared_ptr<const PlapreAssets> require_assets(std::shared_ptr<const PlapreA
 
 assets::TensorStorageType weight_type(
     const runtime::SessionOptions & options,
-    const char * key,
-    assets::TensorStorageType fallback = assets::TensorStorageType::Native) {
+    const char * key) {
     return runtime::parse_tensor_storage_option(
         options.options,
         key,
-        fallback,
+        assets::TensorStorageType::Native,
         {
             assets::TensorStorageType::Native,
             assets::TensorStorageType::F32,
@@ -125,12 +124,7 @@ PlapreSession::PlapreSession(
         }
     }
     engine::debug::trace_log_scalar("plapre.gpu_graphs", enable_gpu_graphs);
-    const auto lm_weight_type = weight_type(
-        options,
-        "plapre.weight_type",
-        options.backend.type == core::BackendType::Cuda
-            ? assets::TensorStorageType::F16
-            : assets::TensorStorageType::Native);
+    const auto lm_weight_type = weight_type(options, "plapre.weight_type");
     const auto acoustic_weight_type = weight_type(options, "plapre.acoustic_weight_type");
     language_model_ = std::make_unique<PlapreCausalLMRuntime>(
         assets_,

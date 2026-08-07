@@ -40,7 +40,7 @@ runtime::ModelCliInterface cli(const PlapreAssets &) {
         {"silence_duration", "seconds", "Silence inserted between text chunks; default 0.1."},
     };
     out.session_options = {
-        {"plapre.weight_type", "native|f32|f16|bf16|q8_0", "Plapre language-model weight storage type; defaults to f16 on CUDA and native elsewhere."},
+        {"plapre.weight_type", "native|f32|f16|bf16|q8_0", "Plapre language-model weight storage type."},
         {"plapre.acoustic_weight_type", "native|f32|f16|bf16|q8_0", "Kanade and HiFT weight storage type."},
         {"plapre.gpu_graphs", "true|false", "GPU graph capture; defaults off on HIP and on elsewhere."},
     };

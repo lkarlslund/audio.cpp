@@ -1722,6 +1722,7 @@ if (ENGINE_BUILD_TESTS)
         src/models/plapre/causal_lm.cpp
         src/models/plapre/kanade.cpp
         src/models/plapre/prompt.cpp
+        src/models/plapre/session.cpp
         src/models/plapre/tokenizer.cpp
     )
     target_include_directories(plapre_prompt_test PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/tests/unittests)

@@ -2,6 +2,7 @@
 #include "engine/models/plapre/causal_lm.h"
 #include "engine/models/plapre/kanade.h"
 #include "engine/models/plapre/prompt.h"
+#include "engine/models/plapre/session.h"
 #include "engine/models/plapre/tokenizer.h"
 
 #include "test_assert.h"
@@ -232,6 +233,42 @@ void test_real_kanade_when_configured() {
         "Kanade mel checksum parity: " + std::to_string(sum));
 }
 
+void test_real_session_when_configured() {
+    const char * model_path = std::getenv("PLAPRE_TEST_SESSION");
+    if (model_path == nullptr || *model_path == '\0') {
+        return;
+    }
+    const auto assets = engine::models::plapre::load_plapre_assets(std::filesystem::path(model_path));
+    engine::runtime::SessionOptions session_options;
+    session_options.backend = {engine::core::BackendType::Cpu, 0, 8};
+    engine::models::plapre::PlapreSession session(
+        {engine::runtime::VoiceTaskKind::Tts, engine::runtime::RunMode::Offline},
+        session_options,
+        assets);
+    session.prepare({});
+    engine::runtime::TaskRequest request;
+    request.text_input = engine::runtime::Transcript{"Hej.", "da"};
+    request.options = {
+        {"voice_id", "tor"},
+        {"max_tokens", "4"},
+        {"do_sample", "false"},
+        {"seed", "42"},
+    };
+    const auto result = session.run(request);
+    require(result.audio_output.has_value(), "Plapre session produces audio output");
+    const auto & audio = *result.audio_output;
+    require_eq(audio.sample_rate, 24000, "Plapre session sample rate");
+    require_eq(audio.channels, 1, "Plapre session channel count");
+    require(!audio.samples.empty(), "Plapre session output is non-empty");
+    float peak = 0.0F;
+    for (const float sample : audio.samples) {
+        require(std::isfinite(sample), "Plapre session output samples are finite");
+        peak = std::max(peak, std::abs(sample));
+    }
+    require(peak > 1.0e-4F, "Plapre session output is non-silent");
+    require(peak <= 1.0F, "Plapre session output is normalized");
+}
+
 }  // namespace
 
 int main() {
@@ -243,6 +280,7 @@ int main() {
         test_real_tokenizer_when_configured();
         test_real_generator_when_configured();
         test_real_kanade_when_configured();
+        test_real_session_when_configured();
     } catch (const std::exception & error) {
         std::cerr << "plapre prompt test failed: " << error.what() << '\n';
         return 1;

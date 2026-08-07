@@ -243,6 +243,7 @@ add_library(engine_core OBJECT
     src/framework/runtime/graph_optimizer.cpp
     src/framework/runtime/host_ops.cpp
     src/framework/runtime/kv_cache.cpp
+    src/framework/runtime/speech_llama.cpp
     src/framework/runtime/bounded_static_kv_decode.cpp
     src/framework/runtime/options.cpp
     src/framework/runtime/session_base.cpp

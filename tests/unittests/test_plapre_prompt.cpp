@@ -1,9 +1,12 @@
+#include "engine/framework/core/execution_context.h"
+#include "engine/models/plapre/causal_lm.h"
 #include "engine/models/plapre/prompt.h"
 #include "engine/models/plapre/tokenizer.h"
 
 #include "test_assert.h"
 
 #include <algorithm>
+#include <cmath>
 #include <cstddef>
 #include <cstdlib>
 #include <filesystem>
@@ -162,6 +165,41 @@ void test_real_tokenizer_when_configured() {
         tokenizer.build_base_prompt("Dette er en dansk stemme."),
         {8000, 2252, 207, 215, 546, 1944, 14, 8001},
         "real Plapre base prompt");
+    const auto voice = assets->speakers.find("tor");
+    require(voice != assets->speakers.end(), "real Plapre package has the tor voice");
+    const auto projected = engine::models::plapre::project_speaker_embedding(*assets, voice->second);
+    require_eq(projected.size(), size_t{960}, "projected speaker size");
+    require(std::abs(projected[0] - 19.893198F) < 1.0e-4F, "speaker projection first value parity");
+    require(std::abs(projected[1] - 0.395991F) < 1.0e-4F, "speaker projection second value parity");
+    float sum = 0.0F;
+    for (const float value : projected) {
+        sum += value;
+    }
+    require(std::abs(sum - (-1.366891F)) < 1.0e-3F, "speaker projection checksum parity");
+}
+
+void test_real_generator_when_configured() {
+    const char * model_path = std::getenv("PLAPRE_TEST_GENERATION");
+    if (model_path == nullptr || *model_path == '\0') {
+        return;
+    }
+    const auto assets = engine::models::plapre::load_plapre_assets(std::filesystem::path(model_path));
+    const engine::models::plapre::PlapreTokenizer tokenizer(assets);
+    engine::core::ExecutionContext execution({engine::core::BackendType::Cpu, 0, 8});
+    engine::models::plapre::PlapreCausalLMRuntime generator(
+        assets,
+        execution,
+        1024ull * 1024ull * 1024ull,
+        1024ull * 1024ull * 1024ull,
+        512ull * 1024ull * 1024ull,
+        engine::assets::TensorStorageType::Native);
+    engine::models::plapre::PlapreGenerationOptions options;
+    options.max_tokens = 1;
+    options.do_sample = false;
+    const auto generated = generator.generate(
+        tokenizer.build_base_prompt("Dette er en dansk stemme."), "tor", options);
+    require_tokens(generated.token_ids, {12643}, "real Plapre greedy first-token parity");
+    require_tokens(generated.codec_tokens, {4641}, "real Plapre codec token parity");
 }
 
 }  // namespace
@@ -173,6 +211,7 @@ int main() {
         test_control_prompts_and_caps();
         test_pronunciation_limits();
         test_real_tokenizer_when_configured();
+        test_real_generator_when_configured();
     } catch (const std::exception & error) {
         std::cerr << "plapre prompt test failed: " << error.what() << '\n';
         return 1;

@@ -549,6 +549,7 @@ audiocpp_add_model(miotts
 audiocpp_add_model(plapre
     SOURCES
         src/models/plapre/assets.cpp
+        src/models/plapre/causal_lm.cpp
         src/models/plapre/prompt.cpp
         src/models/plapre/tokenizer.cpp
 )
@@ -1709,6 +1710,7 @@ if (ENGINE_BUILD_TESTS)
     add_engine_unittest(plapre_prompt_test tests/unittests/test_plapre_prompt.cpp)
     target_sources(plapre_prompt_test PRIVATE
         src/models/plapre/assets.cpp
+        src/models/plapre/causal_lm.cpp
         src/models/plapre/prompt.cpp
         src/models/plapre/tokenizer.cpp
     )

@@ -28,6 +28,7 @@ adapt_assets(const std::shared_ptr<const MioTTSAssets> &source) {
   out->config.pad_token_id = config.pad_token_id;
   out->config.speech_token_start_id = config.speech_token_start_id;
   out->config.speech_token_count = config.speech_token_count;
+  out->config.stop_token_ids = {static_cast<int32_t>(config.eos_token_id)};
   out->config.rms_norm_eps = config.rms_norm_eps;
   out->config.rope_theta = config.rope_theta;
   out->config.qk_norm = true;

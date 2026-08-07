@@ -73,7 +73,7 @@ struct DecoderLayerOutputs {
 
 struct SamplingLogits {
   std::vector<float> speech;
-  float eos = -std::numeric_limits<float>::infinity();
+  std::vector<float> stops;
 };
 
 struct PrefillOutput {
@@ -185,7 +185,8 @@ core::TensorValue prompt_embeddings(core::ModuleBuildContext &ctx,
 }
 
 int64_t candidate_logit_count(const SpeechLlamaConfig &config) {
-  return config.speech_token_count + 1;
+  return config.speech_token_count +
+         static_cast<int64_t>(config.stop_token_ids.size());
 }
 
 std::vector<int32_t>
@@ -195,8 +196,8 @@ build_candidate_token_ids(const SpeechLlamaConfig &config) {
     ids[static_cast<size_t>(i)] =
         static_cast<int32_t>(config.speech_token_start_id + i);
   }
-  ids[static_cast<size_t>(config.speech_token_count)] =
-      static_cast<int32_t>(config.eos_token_id);
+  std::copy(config.stop_token_ids.begin(), config.stop_token_ids.end(),
+            ids.begin() + config.speech_token_count);
   return ids;
 }
 
@@ -472,15 +473,17 @@ int32_t argmax_token(const SamplingLogits &logits,
       best = i;
     }
   }
-  if (logits.eos > logits.speech[static_cast<size_t>(best)]) {
-    return static_cast<int32_t>(config.eos_token_id);
+  for (size_t i = 0; i < logits.stops.size(); ++i) {
+    if (logits.stops[i] > logits.speech[static_cast<size_t>(best)]) {
+      return config.stop_token_ids[i];
+    }
   }
   return static_cast<int32_t>(config.speech_token_start_id + best);
 }
 
 bool is_eos(const SpeechLlamaConfig &config, int32_t token) {
-  return static_cast<int64_t>(token) == config.eos_token_id ||
-         static_cast<int64_t>(token) == config.pad_token_id;
+  return std::find(config.stop_token_ids.begin(), config.stop_token_ids.end(),
+                   token) != config.stop_token_ids.end();
 }
 
 void apply_repetition_penalty(SamplingLogits &logits,
@@ -499,8 +502,13 @@ void apply_repetition_penalty(SamplingLogits &logits,
         static_cast<int64_t>(token) - config.speech_token_start_id;
     if (speech_index >= 0 && speech_index < config.speech_token_count) {
       value = &logits.speech[static_cast<size_t>(speech_index)];
-    } else if (static_cast<int64_t>(token) == config.eos_token_id) {
-      value = &logits.eos;
+    } else {
+      const auto stop = std::find(config.stop_token_ids.begin(),
+                                  config.stop_token_ids.end(), token);
+      if (stop != config.stop_token_ids.end()) {
+        value = &logits.stops[static_cast<size_t>(
+            std::distance(config.stop_token_ids.begin(), stop))];
+      }
     }
     if (value != nullptr) {
       *value = *value < 0.0F ? *value * penalty : *value / penalty;
@@ -567,8 +575,10 @@ int32_t sample_speech_token(const SamplingLogits &logits,
         {static_cast<int32_t>(token),
          logits.speech[static_cast<size_t>(i)] / options.temperature});
   }
-  candidates.push_back({static_cast<int32_t>(config.eos_token_id),
-                        logits.eos / options.temperature});
+  for (size_t i = 0; i < config.stop_token_ids.size(); ++i) {
+    candidates.push_back(
+        {config.stop_token_ids[i], logits.stops[i] / options.temperature});
+  }
   if (options.top_k > 0 &&
       static_cast<size_t>(options.top_k) < candidates.size()) {
     const auto top_end =
@@ -797,10 +807,11 @@ public:
     timing_start = Clock::now();
     ggml_backend_tensor_get(logits_, out.logits.speech.data(), 0,
                             out.logits.speech.size() * sizeof(float));
-    ggml_backend_tensor_get(logits_, &out.logits.eos,
+    out.logits.stops.resize(config.stop_token_ids.size());
+    ggml_backend_tensor_get(logits_, out.logits.stops.data(),
                             static_cast<size_t>(config.speech_token_count) *
                                 sizeof(float),
-                            sizeof(float));
+                            out.logits.stops.size() * sizeof(float));
     out.kv_state.current_end = prompt_steps_;
     out.kv_state.layers.resize(keys_.size());
     const size_t layer_values = static_cast<size_t>(
@@ -983,10 +994,11 @@ public:
     timing_start = Clock::now();
     ggml_backend_tensor_get(logits_, logits.speech.data(), 0,
                             logits.speech.size() * sizeof(float));
-    ggml_backend_tensor_get(logits_, &logits.eos,
+    logits.stops.resize(config.stop_token_ids.size());
+    ggml_backend_tensor_get(logits_, logits.stops.data(),
                             static_cast<size_t>(config.speech_token_count) *
                                 sizeof(float),
-                            sizeof(float));
+                            logits.stops.size() * sizeof(float));
     logits_read_ms_ += engine::debug::elapsed_ms(timing_start, Clock::now());
     step_cache_.advance_after_direct_append(1);
   }

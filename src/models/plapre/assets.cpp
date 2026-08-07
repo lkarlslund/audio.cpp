@@ -57,6 +57,27 @@ TaskTokens parse_task_tokens(const json::Value & tokenizer_config) {
     return tokens;
 }
 
+std::unordered_map<std::string, std::vector<float>> parse_speakers(
+    const json::Value & root,
+    int64_t embedding_size) {
+    std::unordered_map<std::string, std::vector<float>> speakers;
+    for (const auto & [name, value] : root.as_object()) {
+        std::vector<float> embedding;
+        embedding.reserve(value.as_array().size());
+        for (const auto & component : value.as_array()) {
+            embedding.push_back(component.as_f32());
+        }
+        if (static_cast<int64_t>(embedding.size()) != embedding_size) {
+            throw std::runtime_error("Plapre speaker '" + name + "' has an invalid embedding size");
+        }
+        speakers.emplace(name, std::move(embedding));
+    }
+    if (speakers.empty()) {
+        throw std::runtime_error("Plapre package contains no built-in speakers");
+    }
+    return speakers;
+}
+
 PlapreConfig parse_config(const assets::ResourceBundle & resources) {
     const auto root = resources.parse_json("config");
     const auto generation = resources.parse_json("generation_config");
@@ -102,6 +123,7 @@ std::shared_ptr<const PlapreAssets> load_plapre_assets(const std::filesystem::pa
     assets->resources = engine::model_spec::load_resource_bundle_for_family(model_path, "plapre");
     assets->config = parse_config(assets->resources);
     assets->task_tokens = parse_task_tokens(assets->resources.parse_json("tokenizer_config"));
+    assets->speakers = parse_speakers(assets->resources.parse_json("speakers"), assets->config.speaker_embedding_size);
     if (assets->task_tokens.audio_base + kAudioCodebookSize > assets->config.vocab_size) {
         throw std::runtime_error("Plapre audio token range is outside the model vocabulary");
     }

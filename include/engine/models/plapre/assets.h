@@ -8,6 +8,8 @@
 #include <filesystem>
 #include <memory>
 #include <string>
+#include <unordered_map>
+#include <vector>
 
 namespace engine::models::plapre {
 
@@ -33,6 +35,7 @@ struct PlapreAssets {
     assets::ResourceBundle resources;
     PlapreConfig config;
     TaskTokens task_tokens;
+    std::unordered_map<std::string, std::vector<float>> speakers;
     std::shared_ptr<const assets::TensorSource> model_weights;
     std::shared_ptr<const assets::TensorSource> speaker_projection_weights;
     std::shared_ptr<const assets::TensorSource> kanade_weights;

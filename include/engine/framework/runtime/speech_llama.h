@@ -25,6 +25,7 @@ struct SpeechLlamaConfig {
   int64_t pad_token_id = 0;
   int64_t speech_token_start_id = 0;
   int64_t speech_token_count = 0;
+  std::vector<int32_t> stop_token_ids;
   float rms_norm_eps = 1.0e-6F;
   float rope_theta = 10000.0F;
   bool qk_norm = false;

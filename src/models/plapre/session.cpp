@@ -217,13 +217,24 @@ runtime::AudioBuffer PlapreSession::synthesize_chunk(
     const auto voice = voice_name(request);
     auto generation = generation_options(request);
     generation.seed += static_cast<uint32_t>(chunk_index);
+    auto stage_start = Clock::now();
+    const auto prompt = tokenizer_.build_base_prompt(request.text_input->text);
+    engine::debug::timing_log_scalar("plapre.prompt_ms", engine::debug::elapsed_ms(stage_start));
+    stage_start = Clock::now();
     const auto generated = language_model_->generate(
-        tokenizer_.build_base_prompt(request.text_input->text), voice, generation);
+        prompt, voice, generation);
+    engine::debug::timing_log_scalar("plapre.lm_ms", engine::debug::elapsed_ms(stage_start));
     if (generated.codec_tokens.empty()) {
         throw std::runtime_error("Plapre generated no speech tokens");
     }
+    engine::debug::trace_log_scalar(
+        "plapre.generated_tokens", static_cast<int64_t>(generated.codec_tokens.size()));
+    stage_start = Clock::now();
     const auto mel = kanade_->decode(generated.codec_tokens, assets_->speakers.at(voice));
+    engine::debug::timing_log_scalar("plapre.kanade_ms", engine::debug::elapsed_ms(stage_start));
+    stage_start = Clock::now();
     const auto waveform = hift_.synthesize(mel.values, mel.frames, generation.seed);
+    engine::debug::timing_log_scalar("plapre.hift_ms", engine::debug::elapsed_ms(stage_start));
     return runtime::AudioBuffer{
         static_cast<int>(waveform.sample_rate),
         1,

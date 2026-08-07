@@ -1,5 +1,6 @@
 #include "engine/framework/core/execution_context.h"
 #include "engine/models/plapre/causal_lm.h"
+#include "engine/models/plapre/kanade.h"
 #include "engine/models/plapre/prompt.h"
 #include "engine/models/plapre/tokenizer.h"
 
@@ -202,6 +203,35 @@ void test_real_generator_when_configured() {
     require_tokens(generated.codec_tokens, {4641}, "real Plapre codec token parity");
 }
 
+void test_real_kanade_when_configured() {
+    const char * model_path = std::getenv("PLAPRE_TEST_KANADE");
+    if (model_path == nullptr || *model_path == '\0') {
+        return;
+    }
+    const auto assets = engine::models::plapre::load_plapre_assets(std::filesystem::path(model_path));
+    engine::core::ExecutionContext execution({engine::core::BackendType::Cpu, 0, 8});
+    engine::models::plapre::KanadeDecoder decoder(
+        assets->kanade_weights,
+        execution,
+        1024ull * 1024ull * 1024ull,
+        1024ull * 1024ull * 1024ull,
+        256ull * 1024ull * 1024ull,
+        engine::assets::TensorStorageType::F32);
+    const auto mel = decoder.decode({4641, 100, 9999, 42}, assets->speakers.at("tor"));
+    require_eq(mel.frames, int64_t{8}, "Kanade mel frame count");
+    require_eq(mel.values.size(), size_t{640}, "Kanade mel value count");
+    require(
+        std::abs(mel.values[0] - (-3.625030F)) < 0.5F,
+        "Kanade first mel value parity: " + std::to_string(mel.values[0]));
+    float sum = 0.0F;
+    for (const float value : mel.values) {
+        sum += value;
+    }
+    require(
+        std::abs(sum - (-3200.063F)) < 150.0F,
+        "Kanade mel checksum parity: " + std::to_string(sum));
+}
+
 }  // namespace
 
 int main() {
@@ -212,6 +242,7 @@ int main() {
         test_pronunciation_limits();
         test_real_tokenizer_when_configured();
         test_real_generator_when_configured();
+        test_real_kanade_when_configured();
     } catch (const std::exception & error) {
         std::cerr << "plapre prompt test failed: " << error.what() << '\n';
         return 1;

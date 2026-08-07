@@ -550,8 +550,11 @@ audiocpp_add_model(plapre
     SOURCES
         src/models/plapre/assets.cpp
         src/models/plapre/causal_lm.cpp
+        src/models/plapre/kanade.cpp
         src/models/plapre/prompt.cpp
         src/models/plapre/tokenizer.cpp
+    DEPENDS
+        miocodec
 )
 
 audiocpp_add_model(moss
@@ -1711,6 +1714,7 @@ if (ENGINE_BUILD_TESTS)
     target_sources(plapre_prompt_test PRIVATE
         src/models/plapre/assets.cpp
         src/models/plapre/causal_lm.cpp
+        src/models/plapre/kanade.cpp
         src/models/plapre/prompt.cpp
         src/models/plapre/tokenizer.cpp
     )

@@ -149,6 +149,19 @@ struct MioCodecWeights {
     int64_t parameter_count = 0;
 };
 
+MioCodecTransformerWeights bind_miocodec_transformer(
+    MioCodecWeights & weights,
+    const engine::assets::TensorSource & source,
+    const std::string & prefix,
+    int64_t dim,
+    int64_t layers,
+    int64_t heads,
+    int64_t window_size,
+    bool use_adaln,
+    int64_t condition_dim,
+    std::optional<int64_t> output_dim,
+    engine::assets::TensorStorageType storage_type);
+
 std::shared_ptr<const MioCodecWeights> load_miocodec_weights(
     const engine::assets::TensorSource & source,
     engine::core::ExecutionContext & execution_context,

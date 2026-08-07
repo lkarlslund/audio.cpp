@@ -4653,6 +4653,9 @@ static void ggml_cuda_graph_evaluate_and_capture(ggml_backend_cuda_context * cud
 
 #ifdef USE_CUDA_GRAPH
 static bool ggml_cuda_graph_set_enabled(ggml_backend_cuda_context * cuda_ctx, const void * graph_key) {
+    if (!cuda_ctx->graphs_enabled) {
+        return false;
+    }
     ggml_cuda_graph * graph = cuda_ctx->cuda_graph(graph_key);
 
     if (graph->graph == nullptr) {
@@ -4680,10 +4683,8 @@ static enum ggml_status ggml_backend_cuda_graph_compute(ggml_backend_t backend, 
 #ifdef USE_CUDA_GRAPH
     graph_key = ggml_cuda_graph_get_key(cgraph);
 
-    ggml_cuda_graph_set_enabled(cuda_ctx, graph_key);
-
-    ggml_cuda_graph * graph = cuda_ctx->cuda_graph(graph_key);
-    if (graph->is_enabled()) {
+    if (ggml_cuda_graph_set_enabled(cuda_ctx, graph_key)) {
+        ggml_cuda_graph * graph = cuda_ctx->cuda_graph(graph_key);
         const bool graph_compatible = ggml_cuda_graph_check_compability(cgraph);
         if (graph_compatible) {
             const bool properties_changed = ggml_cuda_graph_update_required(cuda_ctx, cgraph);
@@ -5035,6 +5036,22 @@ void ggml_backend_cuda_clear_graph(ggml_backend_t backend, const ggml_cgraph * g
 #else
     GGML_UNUSED(backend);
     GGML_UNUSED(graph);
+#endif
+}
+
+static void ggml_backend_cuda_set_graphs_enabled(ggml_backend_t backend, bool enabled) {
+#ifdef USE_CUDA_GRAPH
+    if (!ggml_backend_is_cuda(backend)) {
+        return;
+    }
+    ggml_backend_cuda_context * cuda_ctx = (ggml_backend_cuda_context *) backend->context;
+    cuda_ctx->graphs_enabled = enabled;
+    if (!enabled) {
+        cuda_ctx->cuda_graphs.clear();
+    }
+#else
+    GGML_UNUSED(backend);
+    GGML_UNUSED(enabled);
 #endif
 }
 
@@ -5834,6 +5851,9 @@ static void * ggml_backend_cuda_reg_get_proc_address(ggml_backend_reg_t reg, con
     }
     if (strcmp(name, "ggml_backend_unregister_host_buffer") == 0) {
         return (void *)ggml_backend_cuda_unregister_host_buffer;
+    }
+    if (strcmp(name, "ggml_backend_set_graphs_enabled") == 0) {
+        return (void *)ggml_backend_cuda_set_graphs_enabled;
     }
     if (strcmp(name, "ggml_backend_get_features") == 0) {
         return (void *)ggml_backend_cuda_get_features;

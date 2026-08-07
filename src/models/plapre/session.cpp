@@ -89,6 +89,14 @@ void validate_request_options(const PlapreGenerationOptions & options) {
     }
 }
 
+bool gpu_graphs_enabled(const runtime::SessionOptions & options) {
+    const bool default_value = options.backend.type != core::BackendType::Hip;
+    const auto value = runtime::find_option(options.options, {"plapre.gpu_graphs"});
+    return value.has_value()
+        ? runtime::parse_bool_option(*value, "plapre.gpu_graphs")
+        : default_value;
+}
+
 }  // namespace
 
 PlapreSession::PlapreSession(
@@ -107,6 +115,15 @@ PlapreSession::PlapreSession(
     }
     text_chunk_size_ = engine::text::parse_text_chunk_size_override(options.options)
         .value_or(kDefaultTextChunkCodepoints);
+    const bool enable_gpu_graphs = gpu_graphs_enabled(options);
+    if (!enable_gpu_graphs &&
+        (options.backend.type == core::BackendType::Hip ||
+         options.backend.type == core::BackendType::Cuda)) {
+        if (!core::set_backend_gpu_graphs_enabled(execution_context().backend(), false)) {
+            throw std::runtime_error("Plapre could not configure GPU graph capture");
+        }
+    }
+    engine::debug::trace_log_scalar("plapre.gpu_graphs", enable_gpu_graphs);
     const auto lm_weight_type = weight_type(options, "plapre.weight_type");
     const auto acoustic_weight_type = weight_type(options, "plapre.acoustic_weight_type");
     language_model_ = std::make_unique<PlapreCausalLMRuntime>(
@@ -138,6 +155,14 @@ PlapreSession::PlapreSession(
         assets_->hift_weights,
         options.backend,
         hift_config(acoustic_weight_type));
+    if (!enable_gpu_graphs &&
+        (options.backend.type == core::BackendType::Hip ||
+         options.backend.type == core::BackendType::Cuda)) {
+        if (!core::set_backend_gpu_graphs_enabled(
+                hift_.weights()->execution_context->backend(), false)) {
+            throw std::runtime_error("Plapre could not configure HiFT GPU graph capture");
+        }
+    }
     assets_->hift_weights->release_storage();
 }
 

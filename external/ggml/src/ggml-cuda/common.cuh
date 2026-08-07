@@ -1385,6 +1385,8 @@ struct ggml_backend_cuda_context {
     int curr_stream_no = 0;
 
 #ifdef USE_CUDA_GRAPH
+    bool graphs_enabled = true;
+
     // Map from first_node_ptr to cuda_graph - allows multiple graphs per context
     // when the computation is split across CPU/GPU (e.g., with --n-cpu-moe)
     std::unordered_map<const void *, std::unique_ptr<ggml_cuda_graph>> cuda_graphs;
@@ -1417,6 +1419,9 @@ struct ggml_backend_cuda_context {
     // Check if any CUDA graph is enabled for this context (used by kernels that need to know
     // if graphs are in use without having access to the specific graph key)
     bool any_cuda_graph_enabled() const {
+        if (!graphs_enabled) {
+            return false;
+        }
         for (const auto & [key, graph] : cuda_graphs) {
             if (graph && graph->is_enabled()) {
                 return true;

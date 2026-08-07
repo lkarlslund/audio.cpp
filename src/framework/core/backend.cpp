@@ -294,6 +294,28 @@ bool requested_backend_uses_host_graph_plan(const BackendConfig & config) {
     return uses_host_graph_plan(config.type);
 }
 
+bool set_backend_gpu_graphs_enabled(ggml_backend_t backend, bool enabled) {
+    if (backend == nullptr) {
+        return false;
+    }
+    const auto device = ggml_backend_get_device(backend);
+    if (device == nullptr) {
+        return false;
+    }
+    const auto registry = ggml_backend_dev_backend_reg(device);
+    if (registry == nullptr) {
+        return false;
+    }
+    using SetGraphsEnabled = void (*)(ggml_backend_t, bool);
+    const auto procedure = reinterpret_cast<SetGraphsEnabled>(
+        ggml_backend_reg_get_proc_address(registry, "ggml_backend_set_graphs_enabled"));
+    if (procedure == nullptr) {
+        return false;
+    }
+    procedure(backend, enabled);
+    return true;
+}
+
 static void cuda_clear_graph(ggml_backend_t backend, ggml_cgraph * graph) {
     if (backend == nullptr || graph == nullptr) return;
     ggml_backend_dev_t device = ggml_backend_get_device(backend);

@@ -43,6 +43,7 @@ bool is_host_backend(ggml_backend_t backend);
 bool uses_host_graph_plan(BackendType type);
 bool uses_host_graph_plan(ggml_backend_t backend);
 bool requested_backend_uses_host_graph_plan(const BackendConfig & config);
+bool set_backend_gpu_graphs_enabled(ggml_backend_t backend, bool enabled);
 void release_backend_graph_resources(ggml_backend_t backend, ggml_cgraph * graph);
 void release_backend_graph_resources(BackendType backend_type, ggml_backend_t backend, ggml_cgraph * graph);
 void validate_backend_graph_supported(ggml_backend_t backend, ggml_cgraph * graph, const char * label);

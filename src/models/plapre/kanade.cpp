@@ -63,6 +63,17 @@ bool ends_with(const std::string & value, const std::string & suffix) {
         value.compare(value.size() - suffix.size(), suffix.size(), suffix) == 0;
 }
 
+bool starts_with(const std::string & value, const std::string & prefix) {
+    return value.size() >= prefix.size() && value.compare(0, prefix.size(), prefix) == 0;
+}
+
+bool is_decoder_weight(const std::string & name) {
+    return starts_with(name, "mel_prenet.") ||
+        starts_with(name, "mel_decoder.") ||
+        starts_with(name, "mel_conv_upsample.") ||
+        starts_with(name, "mel_postnet.");
+}
+
 bool is_qkv_weight(const std::string & name) {
     return name.find(".layers.") != std::string::npos &&
         (ends_with(name, ".attention.wq.weight") ||
@@ -137,7 +148,7 @@ std::shared_ptr<const KanadeWeights> load_weights(
     weights->bindings.store = weights->store;
     weights->bindings.source_path = source.source_path();
     for (const auto & tensor : source.tensors()) {
-        if (is_qkv_weight(tensor.name)) {
+        if (!is_decoder_weight(tensor.name) || is_qkv_weight(tensor.name)) {
             continue;
         }
         const bool force_f32 = tensor.shape.size() == 1 || ends_with(tensor.name, ".bias") ||

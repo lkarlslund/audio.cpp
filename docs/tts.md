@@ -286,7 +286,7 @@ audiocpp_cli --task tts --family plapre --model /path/to/plapre-model --backend 
 | `--do-sample` | `true`, `false` | `true` | Enable stochastic LM sampling. |
 | `--seed` | unsigned integer | random | LM sampling and HiFT source-noise seed. |
 | `--request-option silence_duration=<seconds>` | `0.0`-`10.0` | `0.1` | Silence inserted between long-form chunks. |
-| `--session-option plapre.weight_type=<type>` | `native`, `f32`, `f16`, `bf16`, `q8_0` | `native` | Language-model matmul weight storage type. |
+| `--session-option plapre.weight_type=<type>` | `native`, `f32`, `f16`, `bf16`, `q8_0` | `f16` on CUDA, `native` otherwise | Language-model matmul weight storage type. CUDA FP16 reduces LM latency and memory without changing deterministic reference output. |
 | `--session-option plapre.acoustic_weight_type=<type>` | `native`, `f32`, `f16`, `bf16`, `q8_0` | `native` | Kanade and HiFT matmul weight storage type. |
 | `--session-option plapre.gpu_graphs=true|false` | bool | `false` on HIP, `true` otherwise | Enable backend graph capture. HIP defaults off to avoid expensive capture spikes on dynamic speech lengths. |
 

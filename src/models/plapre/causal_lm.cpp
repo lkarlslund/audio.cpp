@@ -3,6 +3,7 @@
 #include "engine/framework/runtime/speech_llama.h"
 
 #include <stdexcept>
+#include <unordered_map>
 #include <utility>
 
 namespace engine::models::plapre {
@@ -82,10 +83,16 @@ struct PlapreCausalLMRuntime::Impl {
        assets::TensorStorageType storage_type)
       : assets(std::move(source_assets)),
         runtime(adapt_assets(assets), execution, prefill_graph_arena_bytes,
-                decode_graph_arena_bytes, weight_context_bytes, storage_type) {}
+                decode_graph_arena_bytes, weight_context_bytes, storage_type) {
+    for (const auto &[name, embedding] : assets->speakers) {
+      projected_speakers.emplace(
+          name, project_speaker_embedding(*assets, embedding));
+    }
+  }
 
   std::shared_ptr<const PlapreAssets> assets;
   runtime::SpeechLlamaRuntime runtime;
+  std::unordered_map<std::string, std::vector<float>> projected_speakers;
 };
 
 PlapreCausalLMRuntime::PlapreCausalLMRuntime(
@@ -105,14 +112,13 @@ PlapreGeneratedTokens
 PlapreCausalLMRuntime::generate(const std::vector<int32_t> &prompt_ids,
                                 const std::string &speaker,
                                 const PlapreGenerationOptions &options) {
-  const auto voice = impl_->assets->speakers.find(speaker);
-  if (voice == impl_->assets->speakers.end()) {
+  const auto voice = impl_->projected_speakers.find(speaker);
+  if (voice == impl_->projected_speakers.end()) {
     throw std::runtime_error("unknown Plapre speaker: " + speaker);
   }
   runtime::SpeechLlamaPrompt prompt;
   prompt.input_ids = prompt_ids;
-  prompt.prefix_embeddings =
-      project_speaker_embedding(*impl_->assets, voice->second);
+  prompt.prefix_embeddings = voice->second;
   const auto generated =
       impl_->runtime.generate(prompt, adapt_options(options));
   PlapreGeneratedTokens out;

@@ -8,7 +8,7 @@ const std::unordered_map<std::string, std::vector<std::string>> & option_presets
     static const std::unordered_map<std::string, std::vector<std::string>> values = {
         {"best_of_n_language", {"auto", "en", "ja"}},
         {"perf_mode_flash_attention", {"off", "flash_attention"}},
-        {"text_chunk_mode_full", {"word_budget", "tag_aware", "japanese", "endline"}},
+        {"text_chunk_mode_full", {"word_budget", "sentence", "tag_aware", "japanese", "endline"}},
         {"weight_type_codec_q8", {"native", "f32", "f16", "q8_0"}},
         {"weight_type_conv", {"native", "f32", "f16"}},
         {"weight_type_full", {"native", "f32", "f16", "bf16", "q8_0"}},

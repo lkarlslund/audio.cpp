@@ -125,7 +125,7 @@ Current enum presets:
 | `weight_type_full` | `native`, `f32`, `f16`, `bf16`, `q8_0` |
 | `weight_type_conv` | `native`, `f32`, `f16` |
 | `weight_type_codec_q8` | `native`, `f32`, `f16`, `q8_0` |
-| `text_chunk_mode_full` | `word_budget`, `tag_aware`, `japanese`, `endline` |
+| `text_chunk_mode_full` | `word_budget`, `sentence`, `tag_aware`, `japanese`, `endline` |
 | `perf_mode_flash_attention` | `off`, `flash_attention` |
 | `best_of_n_language` | `auto`, `en`, `ja` |
 

@@ -275,10 +275,15 @@ Sentence streaming:
 audiocpp_cli --task tts --family plapre --model /path/to/plapre-model --backend cpu --mode streaming --language da --text "Hej. Dette bliver sendt i bidder." --voice-id ida --out out.wav
 ```
 
+Plapre emits one audio event per sentence. A sentence longer than
+`--text-chunk-size` is split at a word or clause boundary as a fallback. Target
+whitespace and terminal punctuation are normalized before tokenization to match
+the reference implementation.
+
 | Option | Values | Default | Meaning |
 |---|---|---:|---|
 | `--voice-id` | `tor`, `ida`, `liv`, `ask`, `kaj` | `tor` | Built-in Danish speaker. |
-| `--text-chunk-size` | integer chars | `240` | Long-form text chunk size. |
+| `--text-chunk-size` | integer chars | `240` | Maximum size of one sentence; overlong sentences fall back to word/clause splitting. |
 | `--max-tokens` | positive integer | `700` | Maximum 25 Hz speech tokens generated per chunk. |
 | `--temperature` | `0.0`-`2.0` | `0.8` | LM sampling temperature. |
 | `--top-k` | non-negative integer | `50` | LM top-k sampling limit. |

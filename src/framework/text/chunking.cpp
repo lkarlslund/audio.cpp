@@ -63,6 +63,14 @@ bool is_clause_break(std::string_view token) {
            token == u8"，" || token == u8"、" || token == u8"；" || token == u8"：";
 }
 
+bool is_word_codepoint(std::string_view token) {
+    if (token.size() != 1) {
+        return true;
+    }
+    const auto ch = static_cast<unsigned char>(token.front());
+    return std::isalnum(ch) != 0 || ch == '_';
+}
+
 bool is_tag_open(std::string_view token) {
     return token == "[" || token == "<";
 }
@@ -129,6 +137,23 @@ std::vector<WordRange> split_word_ranges(const std::vector<Utf8Span> & spans) {
         span_pos = word_end;
     }
     return words;
+}
+
+bool is_sentence_mode_break(const WordRange & word, const std::vector<Utf8Span> & spans) {
+    if (word.span_end < 2 ||
+        (spans[word.span_end - 1].text != "." &&
+         spans[word.span_end - 1].text != "!" &&
+         spans[word.span_end - 1].text != "?")) {
+        return false;
+    }
+    size_t word_characters = 0;
+    for (size_t index = word.span_end - 1; index > word.span_start; --index) {
+        if (!is_word_codepoint(spans[index - 1].text)) {
+            break;
+        }
+        ++word_characters;
+    }
+    return word_characters >= 2;
 }
 
 std::vector<TextUnit> split_tag_aware_units(const std::vector<Utf8Span> & spans) {
@@ -369,6 +394,66 @@ std::vector<std::string> split_text_chunks_default(
     return chunks;
 }
 
+std::string strip_leading_dialogue_dash(std::string text) {
+    const auto spans = split_utf8_spans(text, "sentence text chunk");
+    if (spans.size() < 2 ||
+        (spans.front().text != "-" && spans.front().text != u8"–" && spans.front().text != u8"—") ||
+        !is_ascii_space(spans[1].text)) {
+        return text;
+    }
+    size_t first_content = 2;
+    while (first_content < spans.size() && is_ascii_space(spans[first_content].text)) {
+        ++first_content;
+    }
+    if (first_content == spans.size()) {
+        return {};
+    }
+    return text.substr(spans[first_content].start);
+}
+
+std::vector<std::string> split_text_chunks_sentence(
+    std::string_view text,
+    int64_t codepoint_budget) {
+    if (codepoint_budget <= 0) {
+        throw std::runtime_error("text chunk budget must be positive");
+    }
+    const std::string trimmed = engine::io::trim_ascii_whitespace(std::string(text));
+    if (trimmed.empty()) {
+        return {};
+    }
+    const auto spans = split_utf8_spans(trimmed, "sentence text chunk");
+    const auto words = split_word_ranges(spans);
+    if (words.empty()) {
+        return {};
+    }
+
+    std::vector<std::string> chunks;
+    size_t sentence_start = 0;
+    for (size_t index = 0; index <= words.size(); ++index) {
+        const bool at_end = index == words.size();
+        if (!at_end && !is_sentence_mode_break(words[index], spans)) {
+            continue;
+        }
+        const size_t sentence_end = at_end ? words.size() : index + 1;
+        if (sentence_start == sentence_end) {
+            continue;
+        }
+        const size_t byte_start = words[sentence_start].byte_start;
+        const size_t byte_end = words[sentence_end - 1].byte_end;
+        auto sentence = strip_leading_dialogue_dash(engine::io::trim_ascii_whitespace(
+            trimmed.substr(byte_start, byte_end - byte_start)));
+        if (!sentence.empty()) {
+            auto pieces = split_text_chunks_default(sentence, codepoint_budget);
+            chunks.insert(
+                chunks.end(),
+                std::make_move_iterator(pieces.begin()),
+                std::make_move_iterator(pieces.end()));
+        }
+        sentence_start = sentence_end;
+    }
+    return chunks;
+}
+
 std::vector<std::string> split_text_chunks_tag_aware(
     std::string_view text,
     int64_t codepoint_budget) {
@@ -517,6 +602,8 @@ std::string_view text_chunk_mode_name(TextChunkMode mode) {
     switch (mode) {
     case TextChunkMode::Default:
         return "default";
+    case TextChunkMode::Sentence:
+        return "sentence";
     case TextChunkMode::TagAware:
         return "tag_aware";
     case TextChunkMode::Japanese:
@@ -537,6 +624,9 @@ std::vector<std::string> split_text_chunks(
     std::string_view text,
     int64_t codepoint_budget,
     TextChunkMode mode) {
+    if (mode == TextChunkMode::Sentence) {
+        return split_text_chunks_sentence(text, codepoint_budget);
+    }
     if (mode == TextChunkMode::TagAware) {
         return split_text_chunks_tag_aware(text, codepoint_budget);
     }
@@ -572,6 +662,9 @@ std::optional<TextChunkMode> parse_text_chunk_mode_override(
     if (value == "default") {
         return TextChunkMode::Default;
     }
+    if (value == "sentence" || value == "sentences") {
+        return TextChunkMode::Sentence;
+    }
     if (value == "tag_aware" || value == "tag-aware" || value == "tagaware") {
         return TextChunkMode::TagAware;
     }
@@ -583,7 +676,7 @@ std::optional<TextChunkMode> parse_text_chunk_mode_override(
     }
     throw std::runtime_error(
         std::string(match->key) +
-        " must be one of default, tag_aware, japanese, endline");
+        " must be one of default, sentence, tag_aware, japanese, endline");
 }
 
 }  // namespace engine::text

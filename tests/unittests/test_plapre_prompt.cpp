@@ -1,4 +1,5 @@
 #include "engine/framework/core/execution_context.h"
+#include "engine/framework/text/chunking.h"
 #include "engine/models/plapre/causal_lm.h"
 #include "engine/models/plapre/kanade.h"
 #include "engine/models/plapre/prompt.h"
@@ -152,6 +153,45 @@ void test_pronunciation_limits() {
     require_eq(prefix.back(), task.pronunciation_end, "pronunciation end marker");
 }
 
+void test_sentence_stream_chunks() {
+    const auto chunks = engine::text::split_text_chunks(
+        "H.C. Andersen skrev. – Næste sætning! f. er en forkortelse?",
+        240,
+        engine::text::TextChunkMode::Sentence);
+    require_eq(chunks.size(), size_t{3}, "Plapre sentence chunk count");
+    require_eq(chunks[0], std::string("H.C. Andersen skrev."), "abbreviation stays in sentence");
+    require_eq(chunks[1], std::string("Næste sætning!"), "dialogue dash is stripped");
+    require_eq(chunks[2], std::string("f. er en forkortelse?"), "short abbreviation does not split");
+
+    const auto pieces = engine::text::split_text_chunks(
+        "Denne meget lange sætning indeholder flere ord og skal deles sikkert ved ordgrænser.",
+        24,
+        engine::text::TextChunkMode::Sentence);
+    require(pieces.size() > 1, "overlong sentence uses budget fallback");
+    for (const auto & piece : pieces) {
+        require(!piece.empty(), "overlong sentence pieces are non-empty");
+    }
+}
+
+void test_target_text_normalization() {
+    require_eq(
+        engine::models::plapre::normalize_target_text("  Hej   med dig  "),
+        std::string("Hej med dig."),
+        "target whitespace and punctuation normalization");
+    require_eq(
+        engine::models::plapre::normalize_target_text("Vent,"),
+        std::string("Vent."),
+        "target trailing comma normalization");
+    require_eq(
+        engine::models::plapre::normalize_target_text("Er du klar?"),
+        std::string("Er du klar?"),
+        "target terminal punctuation preservation");
+    require_eq(
+        engine::models::plapre::normalize_target_text("Måske…"),
+        std::string("Måske…"),
+        "target ellipsis preservation");
+}
+
 void test_real_tokenizer_when_configured() {
     const char * model_path = std::getenv("PLAPRE_TEST_MODEL");
     if (model_path == nullptr || *model_path == '\0') {
@@ -277,6 +317,8 @@ int main() {
         test_audio_token_mapping();
         test_control_prompts_and_caps();
         test_pronunciation_limits();
+        test_sentence_stream_chunks();
+        test_target_text_normalization();
         test_real_tokenizer_when_configured();
         test_real_generator_when_configured();
         test_real_kanade_when_configured();

@@ -36,7 +36,7 @@ runtime::ModelCliInterface cli(const PlapreAssets &) {
         {"temperature", "float", "Sampling temperature; default 0.8."},
         {"seed", "n", "Sampling and vocoder noise seed."},
         {"do_sample", "true|false", "Enable sampling; default true."},
-        {"text_chunk_size", "n", "Maximum Unicode codepoints per long-form text chunk."},
+        {"text_chunk_size", "n", "Maximum Unicode codepoints per sentence before fallback splitting."},
         {"silence_duration", "seconds", "Silence inserted between text chunks; default 0.1."},
     };
     out.session_options = {

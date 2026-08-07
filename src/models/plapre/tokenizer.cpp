@@ -30,6 +30,27 @@ std::string normalize_whitespace(const std::string & text) {
 
 }  // namespace
 
+std::string normalize_target_text(const std::string & text) {
+    std::string normalized = normalize_whitespace(text);
+    if (normalized.empty()) {
+        return normalized;
+    }
+    if (normalized.back() == ',') {
+        normalized.pop_back();
+    }
+    if (normalized.empty()) {
+        return normalized;
+    }
+    const char last = normalized.back();
+    const bool has_terminal_punctuation =
+        last == '.' || last == '?' || last == '!' || last == ':' ||
+        (normalized.size() >= 3 && normalized.compare(normalized.size() - 3, 3, "\xE2\x80\xA6") == 0);
+    if (!has_terminal_punctuation) {
+        normalized.push_back('.');
+    }
+    return normalized;
+}
+
 PlapreTokenizer::PlapreTokenizer(std::shared_ptr<const PlapreAssets> assets)
     : assets_(std::move(assets)) {
     if (assets_ == nullptr) {
@@ -66,7 +87,7 @@ std::vector<int32_t> PlapreTokenizer::encode_text(const std::string & text) cons
 }
 
 std::vector<int32_t> PlapreTokenizer::build_base_prompt(const std::string & text) const {
-    return base_prompt(assets_->task_tokens, encode_text(text));
+    return base_prompt(assets_->task_tokens, encode_text(normalize_target_text(text)));
 }
 
 const TaskTokens & PlapreTokenizer::task_tokens() const noexcept {

@@ -197,7 +197,10 @@ std::vector<runtime::TaskRequest> PlapreSession::chunk_requests(const runtime::T
     validate_request(request);
     const auto chunk_size = engine::text::parse_text_chunk_size_override(request.options)
         .value_or(text_chunk_size_);
-    return runtime::chunk_text_request(request, chunk_size);
+    return runtime::chunk_text_request(
+        request,
+        chunk_size,
+        engine::text::TextChunkMode::Sentence);
 }
 
 PlapreGenerationOptions PlapreSession::generation_options(const runtime::TaskRequest & request) const {

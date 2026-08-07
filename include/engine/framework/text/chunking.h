@@ -11,6 +11,7 @@ namespace engine::text {
 
 enum class TextChunkMode {
     Default,
+    Sentence,
     TagAware,
     Japanese,
     Endline,

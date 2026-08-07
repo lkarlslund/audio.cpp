@@ -13,6 +13,8 @@ class LlamaBpeTokenizer;
 
 namespace engine::models::plapre {
 
+std::string normalize_target_text(const std::string & text);
+
 class PlapreTokenizer {
 public:
     explicit PlapreTokenizer(std::shared_ptr<const PlapreAssets> assets);

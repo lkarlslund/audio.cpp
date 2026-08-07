@@ -5,12 +5,11 @@
   "category": "tts",
   "status": "experimental",
   "tasks": [
-    "tts",
-    "clone",
-    "edit"
+    "tts"
   ],
   "modes": [
-    "offline"
+    "offline",
+    "streaming"
   ],
   "languages": [
     "da"
@@ -18,14 +17,7 @@
   "capabilities": {
     "tts": [
       "built_in_voices",
-      "duration_control",
-      "pronunciation_control"
-    ],
-    "clone": [
-      "speaker_reference"
-    ],
-    "edit": [
-      "audio_infill"
+      "sentence_streaming"
     ]
   },
   "runtime": {

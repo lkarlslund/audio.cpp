@@ -5,6 +5,7 @@
 #include "engine/framework/text/chunking.h"
 
 #include <chrono>
+#include <cmath>
 #include <stdexcept>
 #include <utility>
 
@@ -20,6 +21,7 @@ constexpr size_t kDefaultKanadeWeightContextBytes = 512ull * 1024ull * 1024ull;
 constexpr size_t kDefaultKanadeGraphArenaBytes = 1024ull * 1024ull * 1024ull;
 constexpr size_t kDefaultKanadeConstantContextBytes = 256ull * 1024ull * 1024ull;
 constexpr int64_t kDefaultTextChunkCodepoints = 240;
+constexpr float kDefaultSilenceDurationSeconds = 0.1F;
 
 std::shared_ptr<const PlapreAssets> require_assets(std::shared_ptr<const PlapreAssets> assets) {
     if (assets == nullptr) {
@@ -100,8 +102,8 @@ PlapreSession::PlapreSession(
     if (task_.task != runtime::VoiceTaskKind::Tts) {
         throw std::runtime_error("Plapre only supports the Tts task");
     }
-    if (task_.mode != runtime::RunMode::Offline) {
-        throw std::runtime_error("Plapre currently supports offline sessions");
+    if (task_.mode != runtime::RunMode::Offline && task_.mode != runtime::RunMode::Streaming) {
+        throw std::runtime_error("Plapre only supports offline and streaming sessions");
     }
     text_chunk_size_ = engine::text::parse_text_chunk_size_override(options.options)
         .value_or(kDefaultTextChunkCodepoints);
@@ -157,6 +159,22 @@ void PlapreSession::prepare(const runtime::SessionPreparationRequest &) {
     mark_prepared();
 }
 
+void PlapreSession::validate_request(const runtime::TaskRequest & request) const {
+    if (!request.text_input.has_value() || request.text_input->text.empty()) {
+        throw std::runtime_error("Plapre run requires text_input");
+    }
+    if (request.audio_input.has_value()) {
+        throw std::runtime_error("Plapre TTS does not accept audio_input");
+    }
+}
+
+std::vector<runtime::TaskRequest> PlapreSession::chunk_requests(const runtime::TaskRequest & request) const {
+    validate_request(request);
+    const auto chunk_size = engine::text::parse_text_chunk_size_override(request.options)
+        .value_or(text_chunk_size_);
+    return runtime::chunk_text_request(request, chunk_size);
+}
+
 PlapreGenerationOptions PlapreSession::generation_options(const runtime::TaskRequest & request) const {
     PlapreGenerationOptions options;
     if (const auto value = runtime::parse_i64_option(request.options, {"max_tokens"})) {
@@ -194,10 +212,13 @@ std::string PlapreSession::voice_name(const runtime::TaskRequest & request) cons
 }
 
 runtime::AudioBuffer PlapreSession::synthesize_chunk(
-    const std::string & text,
-    const std::string & voice,
-    const PlapreGenerationOptions & generation) {
-    const auto generated = language_model_->generate(tokenizer_.build_base_prompt(text), voice, generation);
+    const runtime::TaskRequest & request,
+    size_t chunk_index) {
+    const auto voice = voice_name(request);
+    auto generation = generation_options(request);
+    generation.seed += static_cast<uint32_t>(chunk_index);
+    const auto generated = language_model_->generate(
+        tokenizer_.build_base_prompt(request.text_input->text), voice, generation);
     if (generated.codec_tokens.empty()) {
         throw std::runtime_error("Plapre generated no speech tokens");
     }
@@ -210,35 +231,109 @@ runtime::AudioBuffer PlapreSession::synthesize_chunk(
     };
 }
 
+void PlapreSession::append_inter_chunk_silence(
+    runtime::AudioBuffer & audio,
+    const runtime::TaskRequest & request) const {
+    const float seconds = runtime::parse_finite_float_option(request.options, {"silence_duration"})
+        .value_or(kDefaultSilenceDurationSeconds);
+    if (seconds < 0.0F || seconds > 10.0F) {
+        throw std::runtime_error("Plapre silence_duration must be in [0, 10]");
+    }
+    const auto samples = static_cast<size_t>(std::llround(seconds * static_cast<float>(audio.sample_rate)));
+    audio.samples.insert(audio.samples.end(), samples, 0.0F);
+}
+
 runtime::TaskResult PlapreSession::run(const runtime::TaskRequest & request) {
     const auto wall_start = Clock::now();
     require_prepared("Plapre run");
-    if (!request.text_input.has_value() || request.text_input->text.empty()) {
-        throw std::runtime_error("Plapre run requires text_input");
-    }
-    if (request.audio_input.has_value()) {
-        throw std::runtime_error("Plapre TTS does not accept audio_input");
-    }
     const auto voice = voice_name(request);
     const auto generation = generation_options(request);
-    const auto chunk_size = engine::text::parse_text_chunk_size_override(request.options)
-        .value_or(text_chunk_size_);
-    const auto chunks = runtime::chunk_text_request(request, chunk_size);
+    const auto chunks = chunk_requests(request);
     engine::debug::trace_log_scalar("plapre.voice", voice);
     engine::debug::trace_log_scalar("plapre.text_chunk_count", static_cast<int64_t>(chunks.size()));
     engine::debug::trace_log_scalar("plapre.sampling.max_tokens", generation.max_tokens);
     engine::debug::trace_log_scalar("plapre.sampling.seed", generation.seed);
 
     runtime::AudioBuffer merged;
-    for (const auto & chunk : chunks) {
-        runtime::append_audio_buffer(
-            merged,
-            synthesize_chunk(chunk.text_input->text, voice, generation));
+    for (size_t index = 0; index < chunks.size(); ++index) {
+        auto audio = synthesize_chunk(chunks[index], index);
+        if (index + 1 < chunks.size()) {
+            append_inter_chunk_silence(audio, request);
+        }
+        runtime::append_audio_buffer(merged, audio);
     }
     runtime::TaskResult result;
     result.audio_output = std::move(merged);
     engine::debug::timing_log_scalar("session.wall_ms", engine::debug::elapsed_ms(wall_start));
     return result;
+}
+
+runtime::StreamingPolicy PlapreSession::streaming_policy() const {
+    runtime::StreamingPolicy policy;
+    policy.input = runtime::StreamingInputKind::None;
+    policy.output = runtime::StreamingOutputKind::PullEvents;
+    return policy;
+}
+
+void PlapreSession::start_stream(const runtime::TaskRequest & request) {
+    require_prepared("Plapre streaming");
+    if (task_.mode != runtime::RunMode::Streaming) {
+        throw std::runtime_error("Plapre start_stream requires a streaming session");
+    }
+    reset();
+    stream_chunk_requests_ = chunk_requests(request);
+    stream_started_ = true;
+}
+
+std::optional<runtime::StreamEvent> PlapreSession::next_stream_event() {
+    if (!stream_started_) {
+        throw std::runtime_error("Plapre streaming has not been started");
+    }
+    if (stream_chunk_index_ >= stream_chunk_requests_.size()) {
+        return std::nullopt;
+    }
+    const size_t index = stream_chunk_index_++;
+    auto audio = synthesize_chunk(stream_chunk_requests_[index], index);
+    if (index + 1 < stream_chunk_requests_.size()) {
+        append_inter_chunk_silence(audio, stream_chunk_requests_[index]);
+    }
+    runtime::append_audio_buffer(stream_merged_audio_, audio);
+    runtime::StreamEvent event;
+    event.named_audio_outputs.push_back({
+        "chunk_" + std::to_string(index),
+        std::move(audio),
+        {},
+    });
+    return event;
+}
+
+void PlapreSession::set_stream_event_sink(runtime::StreamEventCallback sink) {
+    (void)sink;
+}
+
+runtime::TaskResult PlapreSession::finish_stream() {
+    if (!stream_started_) {
+        throw std::runtime_error("Plapre streaming has not been started");
+    }
+    runtime::TaskResult result;
+    result.audio_output = std::move(stream_merged_audio_);
+    reset();
+    return result;
+}
+
+void PlapreSession::reset() {
+    stream_chunk_requests_.clear();
+    stream_merged_audio_ = runtime::AudioBuffer{};
+    stream_chunk_index_ = 0;
+    stream_started_ = false;
+}
+
+runtime::StreamEvent PlapreSession::process_audio_chunk(const runtime::AudioChunk &) {
+    throw std::runtime_error("Plapre streaming does not consume audio chunks");
+}
+
+runtime::TaskResult PlapreSession::finalize() {
+    return finish_stream();
 }
 
 }  // namespace engine::models::plapre

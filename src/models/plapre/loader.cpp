@@ -20,7 +20,7 @@ runtime::ModelMetadata metadata(const PlapreAssets & assets) {
 runtime::CapabilitySet capabilities(const PlapreAssets &) {
     runtime::CapabilitySet out;
     out.supported_tasks = {
-        {runtime::VoiceTaskKind::Tts, {runtime::RunMode::Offline}},
+        {runtime::VoiceTaskKind::Tts, {runtime::RunMode::Offline, runtime::RunMode::Streaming}},
     };
     out.languages = {"da"};
     return out;
@@ -32,11 +32,12 @@ runtime::ModelCliInterface cli(const PlapreAssets &) {
         {"voice_id", "tor|ida|liv|ask|kaj", "Built-in Danish voice; default tor."},
         {"max_tokens", "n", "Maximum generated 25 Hz speech tokens; default 700."},
         {"top_k", "n", "Sampling top-k; default 50."},
-        {"top_p", "float", "Sampling top-p; default 1.0."},
+        {"top_p", "float", "Sampling top-p; default 0.95."},
         {"temperature", "float", "Sampling temperature; default 0.8."},
         {"seed", "n", "Sampling and vocoder noise seed."},
         {"do_sample", "true|false", "Enable sampling; default true."},
         {"text_chunk_size", "n", "Maximum Unicode codepoints per long-form text chunk."},
+        {"silence_duration", "seconds", "Silence inserted between text chunks; default 0.1."},
     };
     out.session_options = {
         {"plapre.weight_type", "native|f32|f16|bf16|q8_0", "Plapre language-model weight storage type."},
@@ -54,7 +55,7 @@ public:
     runtime::CapabilitySet advertised_capabilities() const override {
         runtime::CapabilitySet out;
         out.supported_tasks = {
-            {runtime::VoiceTaskKind::Tts, {runtime::RunMode::Offline}},
+            {runtime::VoiceTaskKind::Tts, {runtime::RunMode::Offline, runtime::RunMode::Streaming}},
         };
         out.languages = {"da"};
         return out;
@@ -120,8 +121,9 @@ const runtime::CapabilitySet & PlapreLoadedModel::capabilities() const noexcept 
 std::unique_ptr<runtime::IVoiceTaskSession> PlapreLoadedModel::create_task_session(
     const runtime::TaskSpec & task,
     const runtime::SessionOptions & options) const {
-    if (task.task != runtime::VoiceTaskKind::Tts || task.mode != runtime::RunMode::Offline) {
-        throw std::runtime_error("Plapre only supports offline TTS sessions");
+    if (task.task != runtime::VoiceTaskKind::Tts ||
+        (task.mode != runtime::RunMode::Offline && task.mode != runtime::RunMode::Streaming)) {
+        throw std::runtime_error("Plapre only supports offline and streaming TTS sessions");
     }
     return std::make_unique<PlapreSession>(task, options, assets_);
 }

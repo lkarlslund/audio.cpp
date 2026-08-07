@@ -15,7 +15,7 @@ namespace engine::models::plapre {
 struct PlapreGenerationOptions {
   int64_t max_tokens = 700;
   int top_k = 50;
-  float top_p = 1.0F;
+  float top_p = 0.95F;
   float temperature = 0.8F;
   uint32_t seed = 42;
   bool do_sample = true;

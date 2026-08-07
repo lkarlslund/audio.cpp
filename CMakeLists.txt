@@ -545,6 +545,11 @@ audiocpp_add_model(miotts
         qwen3_asr
 )
 
+audiocpp_add_model(plapre
+    SOURCES
+        src/models/plapre/prompt.cpp
+)
+
 audiocpp_add_model(moss
     SOURCES
         src/models/moss/moss_tts_local/assets.cpp
@@ -1697,6 +1702,11 @@ if (ENGINE_BUILD_TESTS)
 
     add_engine_unittest(model_spec_system_test tests/unittests/test_model_spec_system.cpp)
     target_include_directories(model_spec_system_test PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/tests/unittests)
+
+    add_engine_unittest(plapre_prompt_test tests/unittests/test_plapre_prompt.cpp)
+    target_sources(plapre_prompt_test PRIVATE src/models/plapre/prompt.cpp)
+    target_include_directories(plapre_prompt_test PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/tests/unittests)
+    add_test(NAME plapre_prompt_test COMMAND plapre_prompt_test)
 
     add_test(
         NAME model_spec_system_test

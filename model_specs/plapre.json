@@ -1,0 +1,71 @@
+{
+  "family": "plapre",
+  "display_name": "Plapre",
+  "description": "Danish text-to-speech model using a compact Llama generator, Kanade 25 Hz speech tokens, and HiFT waveform synthesis.",
+  "category": "tts",
+  "status": "experimental",
+  "tasks": [
+    "tts",
+    "clone",
+    "edit"
+  ],
+  "modes": [
+    "offline"
+  ],
+  "languages": [
+    "da"
+  ],
+  "capabilities": {
+    "tts": [
+      "built_in_voices",
+      "duration_control",
+      "pronunciation_control"
+    ],
+    "clone": [
+      "speaker_reference"
+    ],
+    "edit": [
+      "audio_infill"
+    ]
+  },
+  "runtime": {
+    "tags": [
+      "safetensors"
+    ]
+  },
+  "ui": {
+    "tags": [
+      "TTS",
+      "Danish",
+      "Clone",
+      "Edit"
+    ],
+    "docs": [
+      "docs/tts.md"
+    ]
+  },
+  "sources": [
+    {
+      "format": "safetensors",
+      "roots": {
+        "model": ".",
+        "kanade": "kanade-25hz-clean",
+        "hift": "CosyVoice2-0.5B"
+      },
+      "files": {
+        "config": "model:config.json",
+        "generation_config": "model:generation_config.json",
+        "tokenizer_json": "model:tokenizer.json",
+        "tokenizer_config": "model:tokenizer_config.json",
+        "speakers": "model:speakers.json",
+        "kanade_config": "kanade:config.yaml"
+      },
+      "tensors": {
+        "weights": "model:model.safetensors",
+        "speaker_projection_weights": "model:speaker_proj.pt",
+        "kanade_weights": "kanade:model.safetensors",
+        "hift_weights": "hift:hift.pt"
+      }
+    }
+  ]
+}

@@ -1,9 +1,12 @@
 #include "engine/models/plapre/prompt.h"
+#include "engine/models/plapre/tokenizer.h"
 
 #include "test_assert.h"
 
 #include <algorithm>
 #include <cstddef>
+#include <cstdlib>
+#include <filesystem>
 #include <iostream>
 #include <stdexcept>
 #include <string>
@@ -144,6 +147,23 @@ void test_pronunciation_limits() {
     require_eq(prefix.back(), task.pronunciation_end, "pronunciation end marker");
 }
 
+void test_real_tokenizer_when_configured() {
+    const char * model_path = std::getenv("PLAPRE_TEST_MODEL");
+    if (model_path == nullptr || *model_path == '\0') {
+        return;
+    }
+    const auto assets = engine::models::plapre::load_plapre_assets(std::filesystem::path(model_path));
+    const engine::models::plapre::PlapreTokenizer tokenizer(assets);
+    require_tokens(
+        tokenizer.encode_text("Hej, hvordan har du det?"),
+        {39, 563, 12, 700, 253, 971, 204, 31},
+        "real Danish tokenizer");
+    require_tokens(
+        tokenizer.build_base_prompt("Dette er en dansk stemme."),
+        {8000, 2252, 207, 215, 546, 1944, 14, 8001},
+        "real Plapre base prompt");
+}
+
 }  // namespace
 
 int main() {
@@ -152,6 +172,7 @@ int main() {
         test_audio_token_mapping();
         test_control_prompts_and_caps();
         test_pronunciation_limits();
+        test_real_tokenizer_when_configured();
     } catch (const std::exception & error) {
         std::cerr << "plapre prompt test failed: " << error.what() << '\n';
         return 1;

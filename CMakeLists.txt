@@ -547,7 +547,9 @@ audiocpp_add_model(miotts
 
 audiocpp_add_model(plapre
     SOURCES
+        src/models/plapre/assets.cpp
         src/models/plapre/prompt.cpp
+        src/models/plapre/tokenizer.cpp
 )
 
 audiocpp_add_model(moss
@@ -1704,7 +1706,11 @@ if (ENGINE_BUILD_TESTS)
     target_include_directories(model_spec_system_test PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/tests/unittests)
 
     add_engine_unittest(plapre_prompt_test tests/unittests/test_plapre_prompt.cpp)
-    target_sources(plapre_prompt_test PRIVATE src/models/plapre/prompt.cpp)
+    target_sources(plapre_prompt_test PRIVATE
+        src/models/plapre/assets.cpp
+        src/models/plapre/prompt.cpp
+        src/models/plapre/tokenizer.cpp
+    )
     target_include_directories(plapre_prompt_test PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/tests/unittests)
     add_test(NAME plapre_prompt_test COMMAND plapre_prompt_test)
 

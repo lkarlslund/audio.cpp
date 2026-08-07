@@ -1,4 +1,5 @@
 #include "engine/framework/assets/tensor_source.h"
+#include "engine/framework/assets/torch_bin.h"
 
 #include "engine/framework/io/binary.h"
 #include "engine/framework/io/filesystem.h"
@@ -8,6 +9,7 @@
 #include <gguf.h>
 
 #include <algorithm>
+#include <array>
 #include <cctype>
 #include <cstdio>
 #include <cstring>
@@ -1498,6 +1500,22 @@ std::shared_ptr<const TensorSource> open_tensor_source(const std::filesystem::pa
     }
     if (extension == ".gguf") {
         return std::make_shared<GgufTensorSource>(path);
+    }
+    if (extension == ".bin" || extension == ".pt" || extension == ".pth") {
+        return open_torch_bin_tensor_source(path);
+    }
+    std::ifstream stream(path, std::ios::binary);
+    std::array<unsigned char, 9> signature{};
+    stream.read(reinterpret_cast<char *>(signature.data()), static_cast<std::streamsize>(signature.size()));
+    const auto read = stream.gcount();
+    if (read >= 4 && signature[0] == 'G' && signature[1] == 'G' && signature[2] == 'U' && signature[3] == 'F') {
+        return std::make_shared<GgufTensorSource>(path);
+    }
+    if (read >= 4 && signature[0] == 'P' && signature[1] == 'K' && signature[2] == 3 && signature[3] == 4) {
+        return open_torch_bin_tensor_source(path);
+    }
+    if (read >= 9 && signature[8] == '{') {
+        return std::make_shared<SafeTensorSource>(path);
     }
     throw std::runtime_error("unsupported tensor source format: " + path.string());
 }

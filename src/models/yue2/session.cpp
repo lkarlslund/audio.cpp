@@ -166,6 +166,7 @@ runtime::ModelCliInterface yue2_cli_interface() {
         {"num_inference_steps", "int", "NAR ODE steps.", false, "10", "1"},
     };
     out.session_options = {
+        {"yue2.nar_fused_swiglu", "bool", "Fuse NAR SiLU and gate multiplication (experimental).", false, "false"},
         {"yue2.model_gguf", "string", "Yue2 main AR/NAR component GGUF file relative to the model root.", false, "yue2-3b-q8_0.gguf"},
         {"yue2.vae_gguf", "string", "Yue2 VAE component GGUF file relative to the model root.", false, "yue2-vae-f16.gguf"},
         {"yue2.model_weight_type", "native|f32|f16|bf16|q8_0|q4_0|q4_k", "Yue2 main model weight storage type.", false, "native"},
@@ -202,7 +203,8 @@ Yue2Session::Yue2Session(
         runtime::parse_size_mb_option(options.options, {"yue2.ar_prefill_graph_arena_mb"}, 4096ull * 1024ull * 1024ull),
         runtime::parse_size_mb_option(options.options, {"yue2.ar_decode_graph_arena_mb"}, 1536ull * 1024ull * 1024ull),
         runtime::parse_size_mb_option(options.options, {"yue2.nar_graph_arena_mb"}, 6144ull * 1024ull * 1024ull),
-        runtime::parse_size_mb_option(options.options, {"yue2.vae_graph_arena_mb"}, 1536ull * 1024ull * 1024ull));
+        runtime::parse_size_mb_option(options.options, {"yue2.vae_graph_arena_mb"}, 1536ull * 1024ull * 1024ull),
+        runtime::parse_bool_option(runtime::find_option(options.options, {"yue2.nar_fused_swiglu"}).value_or("false"), "yue2.nar_fused_swiglu"));
 }
 
 Yue2Session::~Yue2Session() = default;

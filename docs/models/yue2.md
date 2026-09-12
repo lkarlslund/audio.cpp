@@ -149,3 +149,10 @@ Inline ABC can be passed with `--request-option abc=<abc text>`.
 | `--session-option yue2.ar_decode_graph_arena_mb=<n>` | MiB integer >= 1 | `1536` | AR one-token decode graph arena size. |
 | `--session-option yue2.nar_graph_arena_mb=<n>` | MiB integer >= 1 | `6144` | NAR acoustic flow graph arena size. |
 | `--session-option yue2.vae_graph_arena_mb=<n>` | MiB integer >= 1 | `1536` | VAE decode graph arena size. |
+
+## Experimental NAR fusion
+
+`--session-option yue2.nar_fused_swiglu=true` uses the existing GGML SwiGLU
+operation in the acoustic decoder. It defaults to false. See
+[HIP optimization experiments](../reports/yue2_hip_optimizations.md) for
+measurements, exact-output checks and reproduction commands.

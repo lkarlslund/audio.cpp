@@ -114,7 +114,8 @@ public:
         size_t ar_prefill_graph_arena_bytes,
         size_t ar_decode_graph_arena_bytes,
         size_t nar_graph_arena_bytes,
-        size_t vae_graph_arena_bytes)
+        size_t vae_graph_arena_bytes,
+        bool nar_fused_swiglu)
         : execution(&execution),
           assets(std::move(assets)),
           tokenizer(this->assets->tiktoken_path),
@@ -125,7 +126,8 @@ public:
           ar_prefill_graph_arena_bytes(ar_prefill_graph_arena_bytes),
           ar_decode_graph_arena_bytes(ar_decode_graph_arena_bytes),
           nar_graph_arena_bytes(nar_graph_arena_bytes),
-          vae_graph_arena_bytes(vae_graph_arena_bytes) {
+          vae_graph_arena_bytes(vae_graph_arena_bytes),
+          nar_fused_swiglu(nar_fused_swiglu) {
         if (!this->assets) {
             throw std::runtime_error("Yue2 pipeline requires assets");
         }
@@ -390,7 +392,8 @@ private:
             assets,
             model_weight_type,
             model_weight_context_bytes,
-            nar_graph_arena_bytes);
+            nar_graph_arena_bytes,
+            nar_fused_swiglu);
         engine::debug::timing_log_scalar("yue2.nar.init_ms", engine::debug::elapsed_ms(start));
     }
 
@@ -405,6 +408,7 @@ private:
     size_t ar_decode_graph_arena_bytes = 0;
     size_t nar_graph_arena_bytes = 0;
     size_t vae_graph_arena_bytes = 0;
+    bool nar_fused_swiglu = false;
     std::unique_ptr<codecs::OobleckAudioVaeRuntime> vae;
     std::unique_ptr<Yue2ArRuntime> ar;
     std::unique_ptr<Yue2NarRuntime> nar;
@@ -420,7 +424,8 @@ Yue2PipelineRuntime::Yue2PipelineRuntime(
     size_t ar_prefill_graph_arena_bytes,
     size_t ar_decode_graph_arena_bytes,
     size_t nar_graph_arena_bytes,
-    size_t vae_graph_arena_bytes)
+    size_t vae_graph_arena_bytes,
+    bool nar_fused_swiglu)
     : impl_(std::make_unique<Impl>(
           execution,
           std::move(assets),
@@ -431,7 +436,8 @@ Yue2PipelineRuntime::Yue2PipelineRuntime(
           ar_prefill_graph_arena_bytes,
           ar_decode_graph_arena_bytes,
           nar_graph_arena_bytes,
-          vae_graph_arena_bytes)) {}
+          vae_graph_arena_bytes,
+          nar_fused_swiglu)) {}
 
 Yue2PipelineRuntime::~Yue2PipelineRuntime() = default;
 

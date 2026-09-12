@@ -325,6 +325,13 @@
         "required": false,
         "min": 1,
         "default": 1536
+      },
+      {
+        "name": "nar_fused_swiglu",
+        "type": "bool",
+        "description": "Fuse NAR SiLU and gate multiplication (experimental).",
+        "required": false,
+        "default": false
       }
     ],
     "load": []

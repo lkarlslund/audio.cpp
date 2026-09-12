@@ -17,7 +17,6 @@
 #include <chrono>
 #include <cmath>
 #include <cstdint>
-#include <cstdlib>
 #include <limits>
 #include <numeric>
 #include <random>
@@ -37,30 +36,6 @@ struct GgmlContextDeleter {
         }
     }
 };
-
-bool experiment(const char * name) {
-    const auto * value = std::getenv(name);
-    return value != nullptr && std::string(value) == "1";
-}
-
-core::TensorValue pack_rows(
-    core::BackendWeightStore & store, const assets::TensorSource & source,
-    const std::vector<std::string> & names, const std::vector<int64_t> & rows,
-    int64_t columns, assets::TensorStorageType storage_type) {
-    std::vector<std::byte> bytes;
-    ggml_type type = GGML_TYPE_F32;
-    int64_t total = 0;
-    for (size_t i = 0; i < names.size(); ++i) {
-        auto data = source.require_tensor(names[i], storage_type, {rows[i], columns});
-        if (i != 0 && data.type != type) {
-            throw std::runtime_error("YuE2 packed projections require matching storage types");
-        }
-        type = data.type;
-        bytes.insert(bytes.end(), data.bytes.begin(), data.bytes.end());
-        total += rows[i];
-    }
-    return store.make_tensor(core::TensorShape::from_dims({total, columns}), type, bytes.data(), bytes.size());
-}
 
 struct Yue2NarWeights {
     std::shared_ptr<core::BackendWeightStore> store;
@@ -82,12 +57,6 @@ engine::modules::QwenDecoderLayerWeights load_nar_layer(
     const std::string prefix = "model.layers." + std::to_string(layer);
     engine::modules::QwenDecoderLayerWeights out;
     out.input_norm = binding::norm_weight_from_source(store, source, prefix + ".nar_input_layernorm", config.hidden_size);
-    if (experiment("YUE2_TEST_PACK_QKV")) {
-        out.self_attention.qkv_weight = pack_rows(store, source,
-            {prefix + ".nar_self_attn.q_proj.weight", prefix + ".nar_self_attn.k_proj.weight", prefix + ".nar_self_attn.v_proj.weight"},
-            {config.attention_heads * config.head_dim, config.kv_heads * config.head_dim, config.kv_heads * config.head_dim},
-            config.hidden_size, storage_type);
-    } else {
     out.self_attention.q_weight = store.load_tensor(
         source,
         prefix + ".nar_self_attn.q_proj.weight",
@@ -103,7 +72,6 @@ engine::modules::QwenDecoderLayerWeights load_nar_layer(
         prefix + ".nar_self_attn.v_proj.weight",
         storage_type,
         {config.kv_heads * config.head_dim, config.hidden_size});
-    }
     out.self_attention.out_weight = store.load_tensor(
         source,
         prefix + ".nar_self_attn.o_proj.weight",
@@ -112,11 +80,6 @@ engine::modules::QwenDecoderLayerWeights load_nar_layer(
     out.q_norm = binding::norm_weight_from_source(store, source, prefix + ".nar_self_attn.q_norm", config.head_dim);
     out.k_norm = binding::norm_weight_from_source(store, source, prefix + ".nar_self_attn.k_norm", config.head_dim);
     out.post_norm = binding::norm_weight_from_source(store, source, prefix + ".nar_pre_mlp_layernorm", config.hidden_size);
-    if (experiment("YUE2_TEST_PACK_MLP")) {
-        out.mlp.gate_up_proj = engine::modules::LinearWeights{pack_rows(store, source,
-            {prefix + ".nar_mlp.gate_proj.weight", prefix + ".nar_mlp.up_proj.weight"},
-            {config.intermediate_size, config.intermediate_size}, config.hidden_size, storage_type), std::nullopt};
-    } else {
     out.mlp.gate_proj = binding::linear_from_source(
         store,
         source,
@@ -133,7 +96,6 @@ engine::modules::QwenDecoderLayerWeights load_nar_layer(
         config.intermediate_size,
         config.hidden_size,
         false);
-    }
     out.mlp.down_proj = binding::linear_from_source(
         store,
         source,
@@ -270,23 +232,12 @@ QKVParts build_qkv_part(
     const core::TensorValue & input,
     const engine::modules::QwenDecoderLayerWeights & weights,
     const Yue2ModelConfig & config) {
-    core::TensorValue q, k, v;
-    if (weights.self_attention.qkv_weight.has_value()) {
-        const int64_t nq = config.attention_heads * config.head_dim;
-        const int64_t nk = config.kv_heads * config.head_dim;
-        auto packed = engine::modules::LinearModule({config.hidden_size, nq + 2 * nk, false})
-            .build(ctx, input, {*weights.self_attention.qkv_weight, std::nullopt});
-        q = engine::modules::SliceModule({2, 0, nq}).build(ctx, packed);
-        k = engine::modules::SliceModule({2, nq, nk}).build(ctx, packed);
-        v = engine::modules::SliceModule({2, nq + nk, nk}).build(ctx, packed);
-    } else {
-    q = engine::modules::LinearModule({config.hidden_size, config.attention_heads * config.head_dim, false})
+    auto q = engine::modules::LinearModule({config.hidden_size, config.attention_heads * config.head_dim, false})
                  .build(ctx, input, {weights.self_attention.q_weight, std::nullopt});
-    k = engine::modules::LinearModule({config.hidden_size, config.kv_heads * config.head_dim, false})
+    auto k = engine::modules::LinearModule({config.hidden_size, config.kv_heads * config.head_dim, false})
                  .build(ctx, input, {weights.self_attention.k_weight, std::nullopt});
-    v = engine::modules::LinearModule({config.hidden_size, config.kv_heads * config.head_dim, false})
+    auto v = engine::modules::LinearModule({config.hidden_size, config.kv_heads * config.head_dim, false})
                  .build(ctx, input, {weights.self_attention.v_weight, std::nullopt});
-    }
     q = reshape_heads(ctx, q, config.attention_heads, config.head_dim);
     k = reshape_heads(ctx, k, config.kv_heads, config.head_dim);
     q = engine::modules::RMSNormModule({config.head_dim, config.rms_norm_eps, true, false}).build(ctx, q, weights.q_norm);
@@ -370,21 +321,14 @@ core::TensorValue build_mlp_part(
     core::ModuleBuildContext & ctx,
     const core::TensorValue & input,
     const engine::modules::QwenMLPWeights & weights,
-    const Yue2ModelConfig & config) {
-    core::TensorValue gate, up;
-    if (weights.gate_up_proj.has_value()) {
-        auto packed = engine::modules::LinearModule({config.hidden_size, 2 * config.intermediate_size, false})
-            .build(ctx, input, *weights.gate_up_proj);
-        gate = engine::modules::SliceModule({2, 0, config.intermediate_size}).build(ctx, packed);
-        up = engine::modules::SliceModule({2, config.intermediate_size, config.intermediate_size}).build(ctx, packed);
-    } else {
-        gate = engine::modules::LinearModule({config.hidden_size, config.intermediate_size, false})
-            .build(ctx, input, {weights.gate_proj.weight, std::nullopt});
-        up = engine::modules::LinearModule({config.hidden_size, config.intermediate_size, false})
-            .build(ctx, input, {weights.up_proj.weight, std::nullopt});
-    }
+    const Yue2ModelConfig & config,
+    bool fused_swiglu) {
+    auto gate = engine::modules::LinearModule({config.hidden_size, config.intermediate_size, false})
+                    .build(ctx, input, {weights.gate_proj.weight, std::nullopt});
+    auto up = engine::modules::LinearModule({config.hidden_size, config.intermediate_size, false})
+                  .build(ctx, input, {weights.up_proj.weight, std::nullopt});
     core::TensorValue gated;
-    if (experiment("YUE2_TEST_SWIGLU")) {
+    if (fused_swiglu) {
         gated = core::wrap_tensor(ggml_swiglu_split(ctx.ggml, gate.tensor, up.tensor), gate.shape, gate.type);
     } else {
         gate = engine::modules::SiluModule{}.build(ctx, gate);
@@ -402,7 +346,8 @@ core::TensorValue build_cached_nar_layer(
     const core::TensorValue & ar_key,
     const core::TensorValue & ar_value,
     const Yue2ModelConfig & config,
-    core::BackendType backend_type) {
+    core::BackendType backend_type,
+    bool fused_swiglu) {
     auto norm = engine::modules::RMSNormModule({config.hidden_size, config.rms_norm_eps, true, false})
                     .build(ctx, input, nar_weights.input_norm);
     auto qkv = build_qkv_part(ctx, norm, nar_weights, config);
@@ -427,7 +372,7 @@ core::TensorValue build_cached_nar_layer(
     auto x = engine::modules::AddModule{}.build(ctx, input, attn);
     norm = engine::modules::RMSNormModule({config.hidden_size, config.rms_norm_eps, true, false})
                .build(ctx, x, nar_weights.post_norm);
-    return engine::modules::AddModule{}.build(ctx, x, build_mlp_part(ctx, norm, nar_weights.mlp, config));
+    return engine::modules::AddModule{}.build(ctx, x, build_mlp_part(ctx, norm, nar_weights.mlp, config, fused_swiglu));
 }
 
 }  // namespace
@@ -438,21 +383,16 @@ struct Yue2NarRuntime::Impl {
         std::shared_ptr<const Yue2Assets> assets,
         assets::TensorStorageType weight_type,
         size_t weight_context_bytes,
-        size_t graph_arena_bytes)
+        size_t graph_arena_bytes,
+        bool fused_swiglu)
         : execution(execution),
           assets(std::move(assets)),
-          graph_arena_bytes(graph_arena_bytes) {
+          graph_arena_bytes(graph_arena_bytes),
+          fused_swiglu(fused_swiglu) {
         if (!this->assets) {
             throw std::runtime_error("Yue2 NAR runtime requires assets");
         }
         const auto start = Clock::now();
-        if (const auto * type = std::getenv("YUE2_TEST_NAR_TYPE")) {
-            const std::string value(type);
-            if (value == "f16") weight_type = assets::TensorStorageType::F16;
-            else if (value == "bf16") weight_type = assets::TensorStorageType::BF16;
-            else if (value == "f32") weight_type = assets::TensorStorageType::F32;
-            else throw std::runtime_error("unknown experimental NAR type");
-        }
         weights = load_nar_weights(*this->assets, execution, weight_context_bytes, weight_type);
         engine::debug::timing_log_scalar("yue2.nar.init_total_ms", engine::debug::elapsed_ms(start));
     }
@@ -545,7 +485,7 @@ struct Yue2NarRuntime::Impl {
                     ar_keys[static_cast<size_t>(layer)],
                     ar_values[static_cast<size_t>(layer)],
                     config,
-                    owner.execution.backend_type());
+                    owner.execution.backend_type(), owner.fused_swiglu);
             }
             hidden = engine::modules::RMSNormModule({config.hidden_size, config.rms_norm_eps, true, false})
                          .build(build, hidden, owner.weights->final_norm);
@@ -786,6 +726,7 @@ struct Yue2NarRuntime::Impl {
     core::ExecutionContext & execution;
     std::shared_ptr<const Yue2Assets> assets;
     size_t graph_arena_bytes = 0;
+    bool fused_swiglu = false;
     std::shared_ptr<const Yue2NarWeights> weights;
     std::unique_ptr<Graph> graph;
 };
@@ -795,13 +736,15 @@ Yue2NarRuntime::Yue2NarRuntime(
     std::shared_ptr<const Yue2Assets> assets,
     assets::TensorStorageType weight_type,
     size_t weight_context_bytes,
-    size_t graph_arena_bytes)
+    size_t graph_arena_bytes,
+    bool fused_swiglu)
     : impl_(std::make_unique<Impl>(
           execution,
           std::move(assets),
           weight_type,
           weight_context_bytes,
-          graph_arena_bytes)) {}
+          graph_arena_bytes,
+          fused_swiglu)) {}
 
 Yue2NarRuntime::~Yue2NarRuntime() = default;
 

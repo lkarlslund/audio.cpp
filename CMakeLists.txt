@@ -2158,6 +2158,13 @@ if (ENGINE_ENABLE_OPENMP)
 endif()
 
 if (ENGINE_BUILD_TESTS OR ENGINE_BUILD_EXTENDED_TESTS OR ENGINE_BUILD_MODEL_TESTS)
+    if (TARGET engine_model_yue2)
+        add_executable(yue2_nar_parity_probe tests/yue2/yue2_nar_parity_probe.cpp)
+        target_link_libraries(yue2_nar_parity_probe PRIVATE engine_runtime ggml)
+        if (ENGINE_ENABLE_OPENMP)
+            target_link_libraries(yue2_nar_parity_probe PRIVATE OpenMP::OpenMP_CXX)
+        endif()
+    endif()
     add_executable(yue2_vae_parity_probe
         tests/yue2/yue2_vae_parity_probe.cpp
     )

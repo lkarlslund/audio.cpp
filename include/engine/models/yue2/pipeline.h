@@ -25,7 +25,8 @@ public:
         size_t ar_prefill_graph_arena_bytes,
         size_t ar_decode_graph_arena_bytes,
         size_t nar_graph_arena_bytes,
-        size_t vae_graph_arena_bytes);
+        size_t vae_graph_arena_bytes,
+        bool nar_fused_swiglu = false);
     ~Yue2PipelineRuntime();
 
     Yue2Plan plan(const Yue2Request & request);
